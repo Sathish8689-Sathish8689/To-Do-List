@@ -23,7 +23,7 @@ Production: `npm run build`, then `npm start` (the API serves `client/dist` on `
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | API (watch) and client dev server |
-| `npm test` | Server unit and API integration tests (Vitest, in-memory SQLite) |
+| `npm test` | Server and client Vitest suites; server tests include in-memory SQLite API integration tests |
 | `npm run typecheck` | TypeScript checks for server and client |
 | `npm run build` | Compile the server and build the client |
 | `npm run worker` | Standalone reminder worker |

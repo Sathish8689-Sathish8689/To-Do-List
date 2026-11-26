@@ -17,7 +17,7 @@
     "worker": "tsx --env-file-if-exists=.env server/src/worker/main.ts",
     "build": "npm run build -w server && npm run build -w client",
     "start": "node --env-file-if-exists=.env server/dist/index.js",
-    "test": "npm test -w server",
+    "test": "npm test -w server && npm test -w client",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w client"
   },
   "devDependencies": {
