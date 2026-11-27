@@ -10,6 +10,8 @@ export function ProfilePage() {
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
   const [theme, setTheme] = useState<Theme>(user.theme);
+  const [appearanceError, setAppearanceError] = useState('');
+  const [appearanceSaving, setAppearanceSaving] = useState(false);
   const [timeZone, setTimeZone] = useState(user.timeZone);
   const [defaultView, setDefaultView] = useState<View>(user.defaultView);
   const [notif, setNotif] = useState(user.notifications);
@@ -29,12 +31,29 @@ export function ProfilePage() {
     e.preventDefault();
     setErrors({});
     try {
-      const updated: User = await api.updateProfile({ name, email, theme, timeZone, defaultView, notifications: notif });
+      const updated: User = await api.updateProfile({ name, email, timeZone, defaultView, notifications: notif });
       setUser(updated);
       toast('success', 'Profile and preferences saved');
     } catch (err) {
       if (err instanceof ApiRequestError && err.details.length) setErrors(err.fieldErrors());
       else toastError(err);
+    }
+  }
+
+  async function saveAppearance(e: FormEvent) {
+    e.preventDefault();
+    setAppearanceSaving(true);
+    setAppearanceError('');
+    try {
+      const updated: User = await api.updateProfile({ theme });
+      setUser(updated);
+      toast('success', 'Appearance saved');
+    } catch {
+      setAppearanceError(
+        "We couldn't confirm that your appearance preference was saved. The appearance currently active in this app remains in place, and your selected option is kept. Retry to try again.",
+      );
+    } finally {
+      setAppearanceSaving(false);
     }
   }
 
@@ -65,6 +84,64 @@ export function ProfilePage() {
     <section className="stack">
       <h1>Settings</h1>
 
+      <form className="card stack" onSubmit={saveAppearance}>
+        <h2>Application Preferences</h2>
+        <fieldset>
+          <legend>Appearance</legend>
+          <div className="theme-options">
+            <div className="theme-choice">
+              <label className="inline" htmlFor="theme-system">
+                <input
+                  id="theme-system"
+                  type="radio"
+                  name="theme"
+                  value="system"
+                  checked={theme === 'system'}
+                  aria-describedby="theme-system-description"
+                  onChange={() => setTheme('system')}
+                />
+                System Default
+              </label>
+              <p className="muted small" id="theme-system-description">Follows this device's current appearance.</p>
+            </div>
+            <div className="theme-choice">
+              <label className="inline" htmlFor="theme-light">
+                <input
+                  id="theme-light"
+                  type="radio"
+                  name="theme"
+                  value="light"
+                  checked={theme === 'light'}
+                  aria-describedby="theme-light-description"
+                  onChange={() => setTheme('light')}
+                />
+                Light
+              </label>
+              <p className="muted small" id="theme-light-description">Always uses Light Mode, regardless of device settings.</p>
+            </div>
+            <div className="theme-choice">
+              <label className="inline" htmlFor="theme-dark">
+                <input
+                  id="theme-dark"
+                  type="radio"
+                  name="theme"
+                  value="dark"
+                  checked={theme === 'dark'}
+                  aria-describedby="theme-dark-description"
+                  onChange={() => setTheme('dark')}
+                />
+                Dark
+              </label>
+              <p className="muted small" id="theme-dark-description">Always uses Dark Mode, regardless of device settings.</p>
+            </div>
+          </div>
+        </fieldset>
+        {appearanceError && <p className="field-error" role="alert">{appearanceError}</p>}
+        <button className="primary" type="submit" disabled={appearanceSaving}>
+          {appearanceSaving ? 'Saving…' : appearanceError ? 'Retry saving appearance' : 'Save appearance'}
+        </button>
+      </form>
+
       <form className="card stack" onSubmit={saveProfile}>
         <h2>Profile</h2>
         <label>
@@ -79,14 +156,6 @@ export function ProfilePage() {
         </label>
         <h2>Preferences</h2>
         <div className="grid2">
-          <label>
-            Theme
-            <select value={theme} onChange={(e) => setTheme(e.target.value as Theme)}>
-              <option value="system">System</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
-          </label>
           <label>
             Default view
             <select value={defaultView} onChange={(e) => setDefaultView(e.target.value as View)}>

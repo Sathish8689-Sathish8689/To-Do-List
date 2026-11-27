@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { api, ApiRequestError } from '../api';
 import { useSession, useToast } from '../context';
 import { isoToLocalInput, localInputToIso } from '../tz';
@@ -13,6 +14,14 @@ const LEADS: { value: number; label: string }[] = [
   { value: 1440, label: '1 day before' },
 ];
 const CHANNEL_LABELS: Record<Channel, string> = { in_app: 'In-app', email: 'Email', push: 'Push' };
+const FOCUSABLE_SELECTOR = [
+  'a[href]:not([tabindex="-1"])',
+  'button:not(:disabled):not([tabindex="-1"])',
+  'input:not(:disabled):not([type="hidden"]):not([tabindex="-1"])',
+  'select:not(:disabled):not([tabindex="-1"])',
+  'textarea:not(:disabled):not([tabindex="-1"])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(', ');
 
 interface Props {
   taskId: number | null;
@@ -40,7 +49,12 @@ export function TaskEditor({ taskId, categories, onClose, onChanged, onCategorie
   const [newItem, setNewItem] = useState('');
   const [lead, setLead] = useState(30);
   const [channels, setChannels] = useState<Channel[]>(['in_app']);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   const fill = (t: Task) => {
     setTask(t);
@@ -66,11 +80,71 @@ export function TaskEditor({ taskId, categories, onClose, onChanged, onCategorie
   }, [taskId]);
 
   useEffect(() => {
-    titleRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, loading]);
+    const overlay = overlayRef.current;
+    const dialog = dialogRef.current;
+    if (!overlay || !dialog) return;
+
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const background = Array.from(document.body.children).filter(
+      (element): element is HTMLElement => element instanceof HTMLElement && element !== overlay,
+    );
+    const previousInert = background.map((element) => [element, element.hasAttribute('inert')] as const);
+    background.forEach((element) => {
+      element.setAttribute('inert', '');
+    });
+
+    const getFocusable = () =>
+      Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+        (element) => !element.hidden && element.tabIndex >= 0,
+      );
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const focusable = getFocusable();
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) {
+        event.preventDefault();
+        dialog.focus();
+      } else if (!dialog.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      if (dialog.contains(event.target as Node)) return;
+      (getFocusable()[0] ?? dialog).focus();
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('focusin', onFocusIn);
+    (titleRef.current ?? getFocusable()[0] ?? dialog).focus();
+
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('focusin', onFocusIn);
+      previousInert.forEach(([element, inert]) => {
+        if (inert) element.setAttribute('inert', '');
+        else element.removeAttribute('inert');
+      });
+      if (openerRef.current?.isConnected) openerRef.current.focus();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!loading) titleRef.current?.focus();
+  }, [loading]);
 
   const refresh = async (id: number) => {
     fill(await api.getTask(id));
@@ -121,12 +195,12 @@ export function TaskEditor({ taskId, categories, onClose, onChanged, onCategorie
   const archived = task?.archivedAt != null;
   const isSub = task?.parentId != null;
 
-  return (
-    <div className="overlay" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal card" role="dialog" aria-modal="true" aria-labelledby="editor-title">
+  return createPortal(
+    <div ref={overlayRef} className="overlay" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onCloseRef.current()}>
+      <div ref={dialogRef} className="modal card" role="dialog" aria-modal="true" aria-labelledby="editor-title" tabIndex={-1}>
         <div className="row between">
           <h2 id="editor-title">{task ? 'Edit task' : 'New task'}</h2>
-          <button type="button" onClick={onClose} aria-label="Close">
+          <button type="button" onClick={() => onCloseRef.current()} aria-label="Close">
             ✕
           </button>
         </div>
@@ -302,6 +376,7 @@ export function TaskEditor({ taskId, categories, onClose, onChanged, onCategorie
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

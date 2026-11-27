@@ -104,6 +104,35 @@ describe('authentication (FR-019, NFR-002, AC-012)', () => {
 });
 
 describe('profile and preferences (FR-016, FR-017, AC-010)', () => {
+  it('defaults appearance to system and restores the saved account choice on profile/session reads (KAN-3)', async () => {
+    const c = await login(env.app);
+    expect((await c.get('/api/profile')).body.theme).toBe('system');
+
+    const saved = await c.patch('/api/profile', { theme: 'dark' });
+    expect(saved.status).toBe(200);
+    expect(saved.body.theme).toBe('dark');
+    expect((await c.get('/api/profile')).body.theme).toBe('dark');
+
+    const nextSession = await login(env.app);
+    expect((await nextSession.get('/api/auth/me')).body.user.theme).toBe('dark');
+  });
+
+  it('keeps the existing profile appearance write behind authentication, CSRF, and enum validation (KAN-3)', async () => {
+    const unauthenticated = await request(env.app).patch('/api/profile').send({ theme: 'dark' });
+    expect(unauthenticated.status).toBe(401);
+
+    const agent = request.agent(env.app);
+    await agent.post('/api/auth/login').send({ email: 'owner@example.com', password: PASSWORD });
+    const missingCsrf = await agent.patch('/api/profile').send({ theme: 'dark' });
+    expect(missingCsrf.status).toBe(403);
+
+    const c = await login(env.app);
+    const invalidTheme = await c.patch('/api/profile', { theme: 'sepia' });
+    expect(invalidTheme.status).toBe(400);
+    expect(invalidTheme.body.error.code).toBe('VALIDATION_ERROR');
+    expect((await c.get('/api/profile')).body.theme).toBe('system');
+  });
+
   it('updates profile details and preferences', async () => {
     const c = await login(env.app);
     const res = await c.patch('/api/profile', {

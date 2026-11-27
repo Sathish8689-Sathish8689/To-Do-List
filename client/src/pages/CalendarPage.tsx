@@ -5,7 +5,15 @@ import { useSession, useToast } from '../context';
 import { dateKey, formatTime, monthRange, todayKey } from '../tz';
 import type { Category, Task } from '../types';
 
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const WEEKDAYS = [
+  { short: 'Sun', full: 'Sunday' },
+  { short: 'Mon', full: 'Monday' },
+  { short: 'Tue', full: 'Tuesday' },
+  { short: 'Wed', full: 'Wednesday' },
+  { short: 'Thu', full: 'Thursday' },
+  { short: 'Fri', full: 'Friday' },
+  { short: 'Sat', full: 'Saturday' },
+];
 const pad = (n: number) => String(n).padStart(2, '0');
 
 export function CalendarPage() {
@@ -49,6 +57,7 @@ export function CalendarPage() {
   const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const cells: (number | null)[] = [...Array<null>(first).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
   while (cells.length % 7 !== 0) cells.push(null);
+  const weeks = Array.from({ length: cells.length / 7 }, (_, i) => cells.slice(i * 7, (i + 1) * 7));
 
   const shift = (delta: number) => {
     const idx = year * 12 + (month - 1) + delta;
@@ -75,27 +84,39 @@ export function CalendarPage() {
           </button>
         </div>
       </div>
-      <div className="calendar" role="grid" aria-label={label}>
-        {WEEKDAYS.map((d) => (
-          <div key={d} className="cal-head" role="columnheader">
-            {d}
-          </div>
-        ))}
-        {cells.map((day, i) => {
-          const key = day ? `${year}-${pad(month)}-${pad(day)}` : '';
-          const items = day ? byDay.get(key) ?? [] : [];
-          return (
-            <div key={i} role="gridcell" className={`cal-cell ${day ? '' : 'empty'} ${key === today ? 'today' : ''}`}>
-              {day && <div className="cal-day">{day}</div>}
-              {items.map((t) => (
-                <button key={t.id} className={`cal-task p-${t.priority} ${t.status === 'completed' ? 'done' : ''}`} onClick={() => setEditing(t.id)} title={t.title}>
-                  {formatTime(t.dueAt!, user.timeZone)} {t.title}
-                </button>
-              ))}
-            </div>
-          );
-        })}
-      </div>
+      <table className="calendar" aria-label={label}>
+        <thead>
+          <tr>
+            {WEEKDAYS.map((day) => (
+              <th key={day.short} className="cal-head" scope="col" aria-label={day.full}>
+                {day.short}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {weeks.map((week, weekIndex) => (
+            <tr key={weekIndex}>
+              {week.map((day, dayIndex) => {
+                const key = day ? `${year}-${pad(month)}-${pad(day)}` : '';
+                const items = day ? byDay.get(key) ?? [] : [];
+                return (
+                  <td key={`${weekIndex}-${dayIndex}`} className={`cal-cell ${day ? '' : 'empty'} ${key === today ? 'today' : ''}`}>
+                    <div className="cal-cell-content">
+                      {day && <div className="cal-day"><time dateTime={key}>{day}</time></div>}
+                      {items.map((t) => (
+                        <button key={t.id} className={`cal-task p-${t.priority} ${t.status === 'completed' ? 'done' : ''}`} onClick={() => setEditing(t.id)} title={t.title}>
+                          {formatTime(t.dueAt!, user.timeZone)} {t.title}
+                        </button>
+                      ))}
+                    </div>
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
       <p className="muted small">Shows top-level, non-archived tasks that have a due date in this month.</p>
       {editing !== null && (
         <TaskEditor taskId={editing} categories={categories} onClose={() => setEditing(null)} onChanged={() => void load()} onCategoriesChanged={loadCategories} />
